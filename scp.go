@@ -233,6 +233,10 @@ func (s *session) recvCmd(local string, remote string) error {
 		return err
 	}
 
+	if rsp.IsFailure() {
+		return errors.New(rsp.GetMessage().String())
+	}
+
 	if rsp.IsDir() {
 		mode, _, filename, err := rsp.GetMessage().FileInfo()
 		if err != nil {
