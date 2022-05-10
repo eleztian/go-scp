@@ -138,7 +138,8 @@ func (s *sftpSession) copyFileFromRemote(remote string, local string, mode os.Fi
 	defer srcF.Close()
 	n, _ := os.Stat(local)
 	if n != nil && n.IsDir() {
-		local = filepath.Join(local, srcF.Name())
+		_, f := filepath.Split(remote)
+		local = filepath.Join(local, f)
 	}
 	dstF, err := os.OpenFile(local, os.O_CREATE|os.O_TRUNC|os.O_RDWR, mode)
 	if err != nil {
