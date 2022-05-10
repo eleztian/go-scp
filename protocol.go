@@ -64,7 +64,6 @@ func ReadResp(reader io.Reader) (*Resp, error) {
 		}
 		msg = msg[:len(msg)-1]
 	}
-
 	return &Resp{Type: msgType, Msg: Msg(msg)}, nil
 }
 
