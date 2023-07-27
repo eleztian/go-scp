@@ -1,7 +1,6 @@
 package scp
 
 import (
-	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -86,7 +85,7 @@ func (s *sftpSession) Send(local string, remote string) (err error) {
 	return nil
 }
 
-func (s *sftpSession) Recv(remote string, local string) error {
+func (s *sftpSession) Recv(remote string, local string, handler FileHandler) error {
 	p, err := s.cli.ReadLink(remote)
 	if err != nil {
 		info, err := s.cli.Stat(remote)
@@ -94,6 +93,7 @@ func (s *sftpSession) Recv(remote string, local string) error {
 			return err
 		}
 		if info.IsDir() {
+			local = filepath.Join(local, info.Name())
 			err = os.MkdirAll(local, info.Mode())
 			if err != nil && !os.IsExist(err) {
 				return err
@@ -106,13 +106,13 @@ func (s *sftpSession) Recv(remote string, local string) error {
 
 			for _, f := range files {
 				name := f.Name()
-				err = s.Recv(s.cli.Join(remote, name), filepath.Join(local, name))
+				err = s.Recv(s.cli.Join(remote, name), filepath.Join(local, name), handler)
 				if err != nil {
 					return err
 				}
 			}
 		} else {
-			err = s.copyFileFromRemote(remote, local, info.Mode())
+			err = s.copyFileFromRemote(remote, local, info.Mode(), handler)
 			if err != nil {
 				return err
 			}
@@ -123,23 +123,6 @@ func (s *sftpSession) Recv(remote string, local string) error {
 			_ = os.Symlink(rel, local)
 		} else {
 			_ = os.Symlink(p, local)
-		}
-	}
-
-	return nil
-}
-
-func (s *sftpSession) RecvStream(remote string, local io.Writer) error {
-	info, err := s.cli.Stat(remote)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return errors.New("remote is not a file")
-	} else {
-		err = s.copyFileStreamFromRemote(remote, local)
-		if err != nil {
-			return err
 		}
 	}
 
@@ -161,8 +144,7 @@ func (s *sftpSession) copyFileStreamFromRemote(remote string, local io.Writer) e
 	return nil
 }
 
-func (s *sftpSession) copyFileFromRemote(remote string, local string, mode os.FileMode) error {
-
+func (s *sftpSession) copyFileFromRemote(remote string, local string, mode os.FileMode, handler FileHandler) error {
 	srcF, err := s.cli.Open(remote)
 	if err != nil {
 		return err
@@ -174,18 +156,10 @@ func (s *sftpSession) copyFileFromRemote(remote string, local string, mode os.Fi
 		_, f := filepath.Split(remote)
 		local = filepath.Join(local, f)
 	}
-	dstF, err := os.OpenFile(local, os.O_CREATE|os.O_TRUNC|os.O_RDWR, mode)
-	if err != nil {
-		return err
-	}
-	defer dstF.Close()
 
-	_, err = io.Copy(dstF, srcF)
-	if err != nil {
-		return err
-	}
-	return nil
+	return handler(local, mode, srcF)
 }
+
 func (s *sftpSession) copyFileToRemote(remote string, local string, mode os.FileMode) error {
 	srcF, err := os.Open(local)
 	if err != nil {

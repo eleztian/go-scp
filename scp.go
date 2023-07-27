@@ -1,8 +1,6 @@
 package scp
 
 import (
-	"io"
-
 	"golang.org/x/crypto/ssh"
 )
 
@@ -56,13 +54,17 @@ func (s *SCP) Upload(local string, remote string) error {
 }
 
 func (s *SCP) Download(remote string, local string) error {
+	return s.DownloadWithHandler(remote, local, localFileHandler)
+}
+
+func (s *SCP) DownloadWithHandler(remote string, local string, handler FileHandler) error {
 	ses, err := s.newSession()
 	if err != nil {
 		return err
 	}
 	defer ses.Close()
 
-	return ses.Recv(remote, local)
+	return ses.Recv(remote, local, handler)
 }
 
 func (s *SCP) newSession() (Session, error) {
@@ -71,14 +73,4 @@ func (s *SCP) newSession() (Session, error) {
 	} else {
 		return NewScpSession(s.cli, s.remoteBinary)
 	}
-}
-
-func (s *SCP) DownloadStream(remote string, out io.Writer) error {
-	ses, err := s.newSession()
-	if err != nil {
-		return err
-	}
-	defer ses.Close()
-
-	return ses.RecvStream(remote, out)
 }

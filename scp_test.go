@@ -25,7 +25,7 @@ func TestSCP_Download(t *testing.T) {
 		return
 	}
 	defer scp.Close()
-	err = scp.Download(RemotePath, "test")
+	err = scp.Download("/root/ep_package_daemon", "test")
 	if err != nil {
 		t.Error(err)
 		return
