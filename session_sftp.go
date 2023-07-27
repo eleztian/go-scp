@@ -1,6 +1,7 @@
 package scp
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -125,6 +126,38 @@ func (s *sftpSession) Recv(remote string, local string) error {
 		}
 	}
 
+	return nil
+}
+
+func (s *sftpSession) RecvStream(remote string, local io.Writer) error {
+	info, err := s.cli.Stat(remote)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return errors.New("remote is not a file")
+	} else {
+		err = s.copyFileStreamFromRemote(remote, local)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *sftpSession) copyFileStreamFromRemote(remote string, local io.Writer) error {
+	srcF, err := s.cli.Open(remote)
+	if err != nil {
+		return err
+	}
+
+	defer srcF.Close()
+
+	_, err = io.Copy(local, srcF)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

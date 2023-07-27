@@ -191,6 +191,7 @@ func (s *scpSession) Recv(remote string, local string) error {
 	}
 	return rE
 }
+
 func (s *scpSession) recvCmd(local string, remote string) error {
 	rsp, err := ReadResp(s.stdOut)
 	if err != nil {
@@ -211,13 +212,37 @@ func (s *scpSession) recvCmd(local string, remote string) error {
 		if err != nil {
 			return err
 		}
-		return s.recvFile(mode, size, filepath.Join(local, filename), filepath.Join(remote, filename))
+		return s.recvFile(mode, size, filepath.Join(local, filename))
 	} else if rsp.IsEndDir() {
 		return io.EOF
 	} else {
 		return errors.New("invalid protocol")
 	}
 
+}
+
+func (s *scpSession) recvCmdStream(local io.Writer, remote string) error {
+	rsp, err := ReadResp(s.stdOut)
+	if err != nil {
+		return err
+	}
+
+	if rsp.IsFailure() {
+		return errors.New(rsp.GetMessage().String())
+	}
+	if rsp.IsDir() {
+		return errors.New("remote is not a file")
+	} else if !rsp.IsFile() {
+		_, size, _, err := rsp.GetMessage().FileInfo()
+		if err != nil {
+			return err
+		}
+		return s.recvFileStream(size, local)
+	} else if rsp.IsEndDir() {
+		return io.EOF
+	} else {
+		return errors.New("invalid protocol")
+	}
 }
 
 func (s *scpSession) recvDir(mode os.FileMode, local string, remote string) error {
@@ -245,7 +270,7 @@ func (s *scpSession) recvDir(mode os.FileMode, local string, remote string) erro
 	}
 }
 
-func (s *scpSession) recvFile(mode os.FileMode, size int64, local string, remote string) error {
+func (s *scpSession) recvFile(mode os.FileMode, size int64, local string) error {
 	f, err := os.OpenFile(local, os.O_CREATE|os.O_RDWR|os.O_TRUNC, mode)
 	if err != nil {
 		_ = NewErrorRsp(err.Error()).Write(s.stdIn)
@@ -253,12 +278,16 @@ func (s *scpSession) recvFile(mode os.FileMode, size int64, local string, remote
 	}
 	defer f.Close()
 
-	err = NewOkRsp().Write(s.stdIn)
+	return s.recvFileStream(size, f)
+}
+
+func (s *scpSession) recvFileStream(size int64, local io.Writer) error {
+	err := NewOkRsp().Write(s.stdIn)
 	if err != nil {
 		return err
 	}
 
-	_, err = io.CopyN(f, s.stdOut, size)
+	_, err = io.CopyN(local, s.stdOut, size)
 	if err != nil {
 		_ = NewErrorRsp(err.Error()).Write(s.stdIn)
 		return err
@@ -274,4 +303,32 @@ func (s *scpSession) recvFile(mode os.FileMode, size int64, local string, remote
 	}
 
 	return NewOkRsp().Write(s.stdIn)
+}
+
+func (s *scpSession) RecvStream(remote string, local io.Writer) error {
+	wg, _ := errgroup.WithContext(context.TODO())
+	wg.Go(func() error {
+		defer s.stdIn.Close()
+
+		err := NewOkRsp().Write(s.stdIn)
+		if err != nil {
+			return err
+		}
+
+		err = s.recvCmdStream(local, remote)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		return nil
+	})
+	var rE error
+	wg.Go(func() error {
+		rE = s.Run(fmt.Sprintf("%s -rf %s", s.remoteBinary, remote))
+		return nil
+	})
+
+	if err := wg.Wait(); err != nil {
+		return err
+	}
+	return rE
 }
