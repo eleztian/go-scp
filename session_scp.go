@@ -174,7 +174,7 @@ func (s *scpSession) Recv(remote string, local string, handler FileHandler) erro
 			return err
 		}
 
-		err = s.recvCmd(local, remote, handler)
+		err = s.recvCmd(local, remote, true, handler)
 		if err != nil && err != io.EOF {
 			return err
 		}
@@ -192,7 +192,7 @@ func (s *scpSession) Recv(remote string, local string, handler FileHandler) erro
 	return rE
 }
 
-func (s *scpSession) recvCmd(local string, remote string, handler FileHandler) error {
+func (s *scpSession) recvCmd(local string, remote string, isFirst bool, handler FileHandler) error {
 	rsp, err := ReadResp(s.stdOut)
 	if err != nil {
 		return err
@@ -206,7 +206,11 @@ func (s *scpSession) recvCmd(local string, remote string, handler FileHandler) e
 		if err != nil {
 			return err
 		}
-		return s.recvDir(mode, filepath.Join(local, filename), filepath.Join(remote, filename), handler)
+		if isFirst {
+			return s.recvDir(mode, local, filepath.Join(remote, filename), handler)
+		} else {
+			return s.recvDir(mode, filepath.Join(local, filename), filepath.Join(remote, filename), handler)
+		}
 	} else if rsp.IsFile() {
 		mode, size, filename, err := rsp.GetMessage().FileInfo()
 		if err != nil {
@@ -233,7 +237,7 @@ func (s *scpSession) recvDir(mode os.FileMode, local string, remote string, hand
 	}
 
 	for {
-		err = s.recvCmd(local, remote, handler)
+		err = s.recvCmd(local, remote, false, handler)
 		if err != nil {
 			if err == io.EOF { // dir end
 				err = NewOkRsp().Write(s.stdIn)

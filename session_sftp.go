@@ -93,7 +93,6 @@ func (s *sftpSession) Recv(remote string, local string, handler FileHandler) err
 			return err
 		}
 		if info.IsDir() {
-			local = filepath.Join(local, info.Name())
 			err = os.MkdirAll(local, info.Mode())
 			if err != nil && !os.IsExist(err) {
 				return err
