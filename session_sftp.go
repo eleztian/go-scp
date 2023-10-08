@@ -92,6 +92,7 @@ func (s *sftpSession) Recv(remote string, local string, handler FileHandler) err
 		if err != nil {
 			return err
 		}
+
 		if info.IsDir() {
 			err = os.MkdirAll(local, info.Mode())
 			if err != nil && !os.IsExist(err) {
@@ -168,6 +169,7 @@ func (s *sftpSession) copyFileToRemote(remote string, local string, mode os.File
 
 	defer s.cli.Chmod(remote, mode)
 
+	_ = s.cli.MkdirAll(filepath.Dir(remote)) // auto create parent dir
 	dstF, err := s.cli.OpenFile(remote, os.O_CREATE|os.O_TRUNC|os.O_RDWR)
 	if err != nil {
 		return err
